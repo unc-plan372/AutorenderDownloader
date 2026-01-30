@@ -1,8 +1,15 @@
 #' Get list of students who have started the assignment
 #' @export
 get_students_started = function (assignment_id) {
-    req = authenticated_request(glue("https://api.github.com/assignments/{assignment_id}/accepted_assignments"))
-    req_perform(req) |>
+    req = authenticated_request(glue("https://api.github.com/assignments/{assignment_id}/accepted_assignments")) |>
+        req_url_query("per_page"="100")
+    resp = req_perform(req)
+
+    if (resp_header_exists(resp, "Link")) {
+        stop(glue("Warning: for assignment {assignment_id}, more than 100 students, not supported"))
+    }
+
+    resp |>
         resp_body_json()
 }
 
@@ -24,12 +31,12 @@ get_classrooms = function () {
 #' List the artifacts for a repo (should be username/repo format)
 get_artifacts = function (repo) {
     resp = authenticated_request(glue("https://api.github.com/repos/{repo}/actions/artifacts")) |>
-        req_url_query("per_page"=100) |>
+        req_url_query("per_page"="100") |>
         req_perform()
 
     # check for pagination (should only happen with >100 commits, unlikely)
     if (resp_header_exists(resp, "Link")) {
-        print("Warning: for repo {repo}, more than 100 artifacts; may not be retrieving latest")
+        print(glue("Warning: for repo {repo}, more than 100 artifacts; may not be retrieving latest"))
     }
 
     json = resp_body_json(resp)
@@ -72,6 +79,10 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
             slice_max(created_at) |>
             pull(url)
 
+        if (length(artifact) < 1) {
+            return(tibble(name = glue("{name} (no success render found)"), href="#", repo_url=assg$repository$html_url))
+        }
+
         download_artifact(artifact, zipfile)
 
         unzip(zipfile, exdir=student_dir)
@@ -79,7 +90,8 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
 
         tibble(
             name = name,
-            href = glue("student_work/{login}/analysis.html")
+            href = glue("student_work/{login}/analysis.html"),
+            repo_url=assg$repository$html_url
         )
     }) |>
         list_rbind()
@@ -102,9 +114,39 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
         links = arrange(links, name)
     }
 
-    links = glue('<a href="{links$href}">{links$name}</a>')
+    links = glue('<a href="{links$href}">{links$name}</a> <a href="{links$repo_url}">(repo)</a>')
 
     footer = "</ul></body></html>"
     
     cat(header, links, footer, file=file.path(output_directory, "index.html"))
+}
+
+#' Download an assignment interactively
+autorender_download = function () {
+    classrooms = get_classrooms()
+    classidx = menu(map(classrooms, \(c) c$name), title="Choose a classroom")
+    classid = classrooms[[classidx]]$id
+
+    assgs = get_assignments(classid)
+    assgidx = menu(map(assgs, \(a) a$title), title="Choose an assignment")
+    assgid = assgs[[assgidx]]$id
+
+    candidate_directory = str_replace_all(assgs[[assgidx]]$title, "[^a-zA-Z0-9]+", "_")
+
+    if (file.exists(candidate_directory)) {
+        n = 1
+        while (file.exists(glue("{candidate_directory}{n}"))) {
+            n = n + 1
+        }
+
+        candidate_directory = glue("{candidate_directory}{n}")
+    }
+
+    dir = readline(glue("Output directory (default: {candidate_directory}): "))
+
+    if (dir == "") {
+        dir = candidate_directory
+    }
+
+    get_all_artifacts_for_assigment(assgid, dir)
 }
