@@ -135,11 +135,11 @@ autorender_download = function () {
 
     if (file.exists(candidate_directory)) {
         n = 1
-        while (file.exists(glue("{candidate_directory}{n}"))) {
+        while (file.exists(glue("{candidate_directory}_{n}"))) {
             n = n + 1
         }
 
-        candidate_directory = glue("{candidate_directory}{n}")
+        candidate_directory = glue("{candidate_directory}_{n}")
     }
 
     dir = readline(glue("Output directory (default: {candidate_directory}): "))
