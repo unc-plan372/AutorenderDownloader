@@ -1,0 +1,4 @@
+# Copy this file to .Renviron and fill in a Github fine-grained access token below
+# The token should be created in the organization that owns the classroom, and needs to
+# have access to all repositories, and read access to actions and contents
+GH_TOKEN=YOUR TOKEN
