@@ -1,5 +1,4 @@
 #' Get list of students who have started the assignment
-#' @export
 get_students_started = function (assignment_id) {
     req = authenticated_request(glue("https://api.github.com/assignments/{assignment_id}/accepted_assignments")) |>
         req_url_query("per_page"="100")
@@ -122,6 +121,7 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
 }
 
 #' Download an assignment interactively
+#' @export
 autorender_download = function () {
     classrooms = get_classrooms()
     classidx = menu(map(classrooms, \(c) c$name), title="Choose a classroom")
