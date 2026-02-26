@@ -20,5 +20,6 @@
 #' @importFrom purrr map
 #' @importFrom stringr str_replace_all
 #' @importFrom tibble tibble
+#' @importFrom tibble tibble_row
 ## usethis namespace: end
 NULL

@@ -63,10 +63,21 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
     
     students = get_students_started(assignment_id)
 
+    if (length(students) == 0) {
+        stop("No students started. If this is unexpected, it is likely a permissions issue.")
+    } else {
+        print(glue("{length(students)} students started"))
+    }
+
     links = map(students, function (assg, order="alphabetical") {
         login = assg$students[[1]]$login |> str_replace_all("[^a-zA-Z0-9_]+", "-")
         # https://xkcd.com/327/
         name = htmlEscape(assg$students[[1]]$name)
+
+        if (length(name) == 0) {
+            name = login
+        }
+
         repo = assg$repository$full_name
 
         student_dir = file.path(output_directory, "student_work", login)
@@ -75,25 +86,25 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
         zipfile = file.path(student_dir, "artifact.zip")
 
         artifact = get_artifacts(repo) |>
-            slice_max(created_at) |>
-            pull(url)
+            slice_max(created_at)
 
-        if (length(artifact) < 1) {
-            return(tibble(name = glue("{name} (no success render found)"), href="#", repo_url=assg$repository$html_url))
+        if (nrow(artifact) < 1) {
+            return(tibble_row(name = glue("{name} (no successful render found)"), href="#", repo_url=assg$repository$html_url, date=NA))
         }
 
-        download_artifact(artifact, zipfile)
+        download_artifact(artifact$url, zipfile)
 
         unzip(zipfile, exdir=student_dir)
         file.remove(zipfile)
 
-        tibble(
+        tibble_row(
             name = name,
             href = glue("student_work/{login}/analysis.html"),
-            repo_url=assg$repository$html_url
+            repo_url=assg$repository$html_url,
+            date=artifact$created_at
         )
-    }) |>
-        list_rbind()
+    }) |> list_rbind()
+
 
     conn = file(file.path(output_directory, "index.html"))
     header = "
@@ -113,7 +124,7 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
         links = arrange(links, name)
     }
 
-    links = glue('<a href="{links$href}">{links$name}</a> <a href="{links$repo_url}">(repo)</a>')
+    links = glue('<li><a href="{links$href}">{links$name}</a> <a href="{links$repo_url}">(repo)</a> (most recent update: {links$date})</li>')
 
     footer = "</ul></body></html>"
     
