@@ -55,3 +55,11 @@ autorender_download()
 ```
 
 and follow the prompts.
+
+By default students will be listed in alphabetical order. Use
+
+```
+autorender_download(order="random")
+```
+
+to get them in random (but stable within an assignment) order.

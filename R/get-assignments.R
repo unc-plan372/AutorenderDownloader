@@ -1,6 +1,6 @@
 #' Get list of students who have started the assignment
-get_students_started = function (assignment_id) {
-    req = authenticated_request(glue("https://api.github.com/assignments/{assignment_id}/accepted_assignments")) |>
+get_student_assignments = function (assignment_id) {
+    req = authenticated_request(glue("https://api.github.com/assignments/{assignment_id}/grades")) |>
         req_url_query("per_page"="100")
     resp = req_perform(req)
 
@@ -61,7 +61,7 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
     dir.create(output_directory)
     dir.create(file.path(output_directory, "student_work"))
     
-    students = get_students_started(assignment_id)
+    students = get_student_assignments(assignment_id)
 
     if (length(students) == 0) {
         stop("No students started. If this is unexpected, it is likely a permissions issue.")
@@ -69,17 +69,16 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
         print(glue("{length(students)} students started"))
     }
 
-    links = map(students, function (assg, order="alphabetical") {
-        login = assg$students[[1]]$login |> str_replace_all("[^a-zA-Z0-9_]+", "-")
+    links = map(students, function (assg) {
+        login = assg$github_username |> str_replace_all("[^a-zA-Z0-9_]+", "-")
         # https://xkcd.com/327/
-        name = htmlEscape(assg$students[[1]]$name)
+        name = htmlEscape(assg$roster_identifier)
 
         if (length(name) == 0) {
             name = login
         }
 
-        repo = assg$repository$full_name
-
+        repo = str_replace(assg$student_repository_url, "https://github.com/", "")
         student_dir = file.path(output_directory, "student_work", login)
         dir.create(student_dir)
 
@@ -89,7 +88,7 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
             slice_max(created_at)
 
         if (nrow(artifact) < 1) {
-            return(tibble_row(name = glue("{name} (no successful render found)"), href="#", repo_url=assg$repository$html_url, date=NA))
+            return(tibble_row(name = glue("{name} (no successful render found)"), href="#", repo_url=assg$student_repository_url, date=NA))
         }
 
         download_artifact(artifact$url, zipfile)
@@ -100,10 +99,10 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
         tibble_row(
             name = name,
             href = glue("student_work/{login}/analysis.html"),
-            repo_url=assg$repository$html_url,
+            repo_url=assg$student_repository_url,
             date=artifact$created_at
         )
-    }) |> list_rbind()
+    }, .progress=TRUE) |> list_rbind()
 
 
     conn = file(file.path(output_directory, "index.html"))
@@ -118,13 +117,14 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
     "
 
     if (order == "random") {
+        set.seed(as.numeric(assignment_id))
         links$idx = runif(nrow(links))
         links = arrange(links, idx)
     } else if (order == "alphabetical") {
         links = arrange(links, name)
     }
 
-    links = glue('<li><a href="{links$href}">{links$name}</a> <a href="{links$repo_url}">(repo)</a> (most recent update: {links$date})</li>')
+    links = glue('<li><a href="{htmlEscape(links$href)}">{htmlEscape(links$name)}</a> <a href="{htmlEscape(links$repo_url)}">(repo)</a> (most recent update: {htmlEscape(links$date)})</li>')
 
     footer = "</ul></body></html>"
     
@@ -133,7 +133,7 @@ get_all_artifacts_for_assigment = function (assignment_id, output_directory, ord
 
 #' Download an assignment interactively
 #' @export
-autorender_download = function () {
+autorender_download = function (order="random") {
     classrooms = get_classrooms()
     classidx = menu(map(classrooms, \(c) c$name), title="Choose a classroom")
     classid = classrooms[[classidx]]$id
@@ -159,5 +159,5 @@ autorender_download = function () {
         dir = candidate_directory
     }
 
-    get_all_artifacts_for_assigment(assgid, dir)
+    get_all_artifacts_for_assigment(assgid, dir, order)
 }
